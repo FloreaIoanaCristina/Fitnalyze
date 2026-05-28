@@ -7,15 +7,20 @@ class ExerciseCard extends StatelessWidget {
   final IconData icon;
   final Color accentColor;
   final bool isEnabled;
+  final ExerciseAnalyzer? analyzer;
+  final VoidCallback? onReset;
 
-  const ExerciseCard({
+  ExerciseCard({
     super.key,
     required this.title,
     required this.description,
     required this.icon,
     required this.accentColor,
+    this.analyzer,
+    this.onReset,
     this.isEnabled = true,
   });
+
 
   @override
   Widget build(BuildContext context) {
@@ -26,23 +31,30 @@ class ExerciseCard extends StatelessWidget {
       elevation: 4,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: InkWell(
-        onTap: isEnabled
+        onTap: isEnabled && analyzer != null
             ? () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => CameraScreen(exerciseName: title),
+                      builder: (context) => CameraScreen(
+                        exerciseName: title,
+                        analyzer: analyzer!,
+                      ),
                     ),
                   );
+                  if (onReset != null) {
+                    onReset!();
+                  }
                 }
             : null,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: EdgeInsets.symmetric(
             horizontal: screenWidth * 0.04,
-            vertical: 12.0,
+            vertical: 16.0,
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
@@ -53,10 +65,11 @@ class ExerciseCard extends StatelessWidget {
                 child: Icon(icon, size: 40, color: accentColor),
               ),
               const SizedBox(width: 16),
-              Expanded(
+              Flexible(
+                fit: FlexFit.loose,
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       title,
@@ -69,13 +82,15 @@ class ExerciseCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       description,
-                      maxLines: 2,
+                      maxLines: 4,
                       overflow: TextOverflow.ellipsis,
+                      softWrap: true,
                       style: TextStyle(fontSize: 14, color: Colors.grey[400]),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               if (isEnabled)
                 const Icon(Icons.arrow_forward_ios, color: Colors.blueAccent, size: 18)
             ],

@@ -11,7 +11,13 @@ typedef ExerciseAnalyzer = String Function(Pose pose);
 
 class CameraScreen extends StatefulWidget {
   final String exerciseName;
-  const CameraScreen({super.key, required this.exerciseName});
+  final ExerciseAnalyzer analyzer;
+
+  const CameraScreen({
+    super.key,
+    required this.exerciseName,
+    required this.analyzer,
+  });
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -87,8 +93,8 @@ class _CameraScreenState extends State<CameraScreen> {
         allBytes.putUint8List(plane.bytes);
       }
       final bytes = allBytes.done().buffer.asUint8List();
-      final imageRotation = InputImageRotation.rotation270deg;
-      final inputImageFormat = InputImageFormat.nv21;
+      const imageRotation = InputImageRotation.rotation270deg;
+      const inputImageFormat = InputImageFormat.nv21;
 
       final metadata = InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
@@ -103,15 +109,27 @@ class _CameraScreenState extends State<CameraScreen> {
       if (!mounted) return;
 
       if (poses.isNotEmpty) {
-        setState(() {
-          _detectedPoses = poses;
-          _debugText = "Pozitie detectata";
-        });
+        final firstPose = poses.first;
+
+        bool isWholeBodyVisible = _checkBodyVisibility(firstPose);
+
+        if (isWholeBodyVisible) {
+          final String rezultatAnaliza = widget.analyzer(firstPose);
+
+          if (mounted) {
+            setState(() {
+              _detectedPoses = poses;
+              _debugText = rezultatAnaliza;
+            });
+          }
+        }
       } else {
-        setState(() {
-          _detectedPoses = [];
-          _debugText = "Caut corpul... (Asigură-te că te vezi de la brâu în sus)";
-        });
+        if (mounted) {
+          setState(() {
+            _detectedPoses = [];
+            _debugText = "Se cauta corpul... Asigură-te că te vezi complet în cadru.";
+          });
+        }
       }
     } catch (e) {
       print("Eroare procesare cadru: $e");
@@ -120,49 +138,29 @@ class _CameraScreenState extends State<CameraScreen> {
       _isProcessing = false;
     }
   }
+  bool _checkBodyVisibility(Pose pose) {
+    const double confidenceThreshold = 0.65;
 
-  Future<void> _testeazaCuPozaDinGalerie() async {
-    _isProcessing = true;
+    final criticalLandmarks = [
+      PoseLandmarkType.leftShoulder,
+      PoseLandmarkType.rightShoulder,
+      PoseLandmarkType.leftHip,
+      PoseLandmarkType.rightHip,
+      PoseLandmarkType.leftKnee,
+      PoseLandmarkType.rightKnee,
+      PoseLandmarkType.leftAnkle,
+      PoseLandmarkType.rightAnkle,
+    ];
 
-    setState(() {
-      _debugText = "Se deschide galeria... Alege o poză FULL-BODY.";
-    });
+    for (var type in criticalLandmarks) {
+      final landmark = pose.landmarks[type];
 
-    try {
-      final picker = ImagePicker();
-      final XFile? file = await picker.pickImage(source: ImageSource.gallery);
-
-      if (file == null) {
-        setState(() {
-          _debugText = "Ai anulat selectarea pozei.";
-          _isProcessing = false;
-        });
-        return;
+      if (landmark == null || landmark.likelihood < confidenceThreshold) {
+        return false;
       }
-
-      final inputImage = InputImage.fromFilePath(file.path);
-
-      setState(() {
-        _debugText = "ML Kit analizează poza...";
-      });
-
-      final poses = await _poseDetector!.processImage(inputImage);
-
-      setState(() {
-        if (poses.isNotEmpty) {
-          final puncte = poses.first.landmarks.length;
-          _debugText = "SUCCES ML KIT!\nA detectat corpul și a găsit $puncte puncte cheie.";
-        } else {
-          _debugText = "ML Kit a rulat, dar nu a văzut niciun corp.\nAsigură-te că în poză se văd umerii și șoldurile clare!";
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _debugText = "Eroare la selectare/procesare: $e";
-      });
-    } finally {
-      _isProcessing = false;
     }
+
+    return true;
   }
 
   @override
@@ -228,41 +226,35 @@ class _CameraScreenState extends State<CameraScreen> {
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.only(top: 24, bottom: 24, left: 64, right: 64),
               color: Colors.black.withOpacity(0.7),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    "Antrenament: ${widget.exerciseName.toUpperCase()}",
+                    "Exercițiu: ${widget.exerciseName.toUpperCase()}",
                     style: const TextStyle(color: Colors.blueAccent, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _debugText,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    style: const TextStyle(color: Colors.white, fontSize: 32),
                   ),
                 ],
               ),
             ),
           ),
           Positioned(
-            top: 40,
-            left: 20,
+            top: 12,
+            left: 12,
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 28),
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 24),
               onPressed: () => Navigator.pop(context),
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _testeazaCuPozaDinGalerie,
-        backgroundColor: Colors.blueAccent,
-        icon: const Icon(Icons.photo_library, color: Colors.white),
-        label: const Text("Test Galerie (Full-Body)", style: TextStyle(color: Colors.white)),
-      ),
+      )
     )
     );
   }
