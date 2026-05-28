@@ -1,6 +1,6 @@
 # fitnalyzer
 
-A mobile app for fitness tracking using artificial intelligence and computer vision to correct the userțs posture and behave like a personal fitness coach.
+A mobile app for fitness tracking using artificial intelligence and computer vision to correct the user's posture and behave like a personal fitness coach.
 
 ## Getting Started
 
