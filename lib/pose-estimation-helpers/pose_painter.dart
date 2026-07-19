@@ -4,71 +4,117 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 class PosePainter extends CustomPainter {
   final List<Pose> poses;
   final Size absoluteImageSize;
+  final bool isLandscape;
 
-  PosePainter(this.poses, this.absoluteImageSize);
+  PosePainter(
+      this.poses,
+      this.absoluteImageSize, {
+        this.isLandscape = false,
+      });
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-
-    if (oldDelegate is PosePainter) {
-      return oldDelegate.poses != poses;
-    }
-    return true;
+  bool shouldRepaint(covariant PosePainter oldDelegate) {
+    return oldDelegate.poses != poses ||
+        oldDelegate.absoluteImageSize != absoluteImageSize ||
+        oldDelegate.isLandscape != isLandscape;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (poses.isEmpty) return;
 
-    final paintPoint = Paint()
+    final pointPaint = Paint()
       ..color = Colors.greenAccent
-      ..style = PaintingStyle.fill
-      ..strokeWidth = 6.0;
+      ..style = PaintingStyle.fill;
 
-    final paintLine = Paint()
+    final linePaint = Paint()
       ..color = Colors.blueAccent
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0;
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
 
-    // Calculăm raportul de transformare a coordonatelor de la dimensiunea pozei la dimensiunea ecranului
-    final double scaleX = size.width / absoluteImageSize.width;
-    final double scaleY = size.height / absoluteImageSize.height;
+    Offset mapPoint(PoseLandmark landmark) {
+      double x = landmark.x;
+      double y = landmark.y;
 
-    for (final pose in poses) {
-      // 1. Desenăm punctele (Landmarks)
-      pose.landmarks.forEach((type, landmark) {
-        final Offset position = Offset(landmark.x * scaleX, landmark.y * scaleY);
-        canvas.drawCircle(position, 5, paintPoint);
-      });
-
-      // 2. Desenăm liniile scheletului (Funcție ajutătoare)
-      void drawLine(PoseLandmarkType start, PoseLandmarkType end) {
-        final startLandmark = pose.landmarks[start];
-        final endLandmark = pose.landmarks[end];
-        if (startLandmark != null && endLandmark != null) {
-          canvas.drawLine(
-            Offset(startLandmark.x * scaleX, startLandmark.y * scaleY),
-            Offset(endLandmark.x * scaleX, endLandmark.y * scaleY),
-            paintLine,
-          );
-        }
+      if (!isLandscape) {
+        return Offset(
+          size.width -
+              (x * size.width / absoluteImageSize.width),
+          y * size.height / absoluteImageSize.height,
+        );
       }
 
-      // Conectăm umerii, brațele și toracele
-      drawLine(PoseLandmarkType.leftShoulder, PoseLandmarkType.rightShoulder);
-      drawLine(PoseLandmarkType.leftShoulder, PoseLandmarkType.leftElbow);
-      drawLine(PoseLandmarkType.leftElbow, PoseLandmarkType.leftWrist);
-      drawLine(PoseLandmarkType.rightShoulder, PoseLandmarkType.rightElbow);
-      drawLine(PoseLandmarkType.rightElbow, PoseLandmarkType.rightWrist);
+      final rotatedX = y;
+      final rotatedY = absoluteImageSize.width - x;
 
-      // Conectăm trunchiul și picioarele
-      drawLine(PoseLandmarkType.leftShoulder, PoseLandmarkType.leftHip);
-      drawLine(PoseLandmarkType.rightShoulder, PoseLandmarkType.rightHip);
-      drawLine(PoseLandmarkType.leftHip, PoseLandmarkType.rightHip);
-      drawLine(PoseLandmarkType.leftHip, PoseLandmarkType.leftKnee);
-      drawLine(PoseLandmarkType.leftKnee, PoseLandmarkType.leftAnkle);
-      drawLine(PoseLandmarkType.rightHip, PoseLandmarkType.rightKnee);
-      drawLine(PoseLandmarkType.rightKnee, PoseLandmarkType.rightAnkle);
+      return Offset(
+        size.width -
+            (rotatedX * size.width / absoluteImageSize.height),
+        rotatedY * size.height / absoluteImageSize.width,
+      );
+    }
+
+    void drawConnection(
+        Pose pose,
+        PoseLandmarkType start,
+        PoseLandmarkType end,
+        ) {
+      final a = pose.landmarks[start];
+      final b = pose.landmarks[end];
+
+      if (a == null || b == null) return;
+
+      canvas.drawLine(
+        mapPoint(a),
+        mapPoint(b),
+        linePaint,
+      );
+    }
+
+    for (final pose in poses) {
+      pose.landmarks.forEach((type, landmark) {
+        canvas.drawCircle(
+          mapPoint(landmark),
+          5,
+          pointPaint,
+        );
+      });
+
+      drawConnection(
+          pose, PoseLandmarkType.leftShoulder, PoseLandmarkType.rightShoulder);
+
+      drawConnection(
+          pose, PoseLandmarkType.leftShoulder, PoseLandmarkType.leftElbow);
+
+      drawConnection(
+          pose, PoseLandmarkType.leftElbow, PoseLandmarkType.leftWrist);
+
+      drawConnection(
+          pose, PoseLandmarkType.rightShoulder, PoseLandmarkType.rightElbow);
+
+      drawConnection(
+          pose, PoseLandmarkType.rightElbow, PoseLandmarkType.rightWrist);
+
+      drawConnection(
+          pose, PoseLandmarkType.leftShoulder, PoseLandmarkType.leftHip);
+
+      drawConnection(
+          pose, PoseLandmarkType.rightShoulder, PoseLandmarkType.rightHip);
+
+      drawConnection(
+          pose, PoseLandmarkType.leftHip, PoseLandmarkType.rightHip);
+
+      drawConnection(
+          pose, PoseLandmarkType.leftHip, PoseLandmarkType.leftKnee);
+
+      drawConnection(
+          pose, PoseLandmarkType.leftKnee, PoseLandmarkType.leftAnkle);
+
+      drawConnection(
+          pose, PoseLandmarkType.rightHip, PoseLandmarkType.rightKnee);
+
+      drawConnection(
+          pose, PoseLandmarkType.rightKnee, PoseLandmarkType.rightAnkle);
     }
   }
 }

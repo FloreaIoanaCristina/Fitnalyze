@@ -1,6 +1,6 @@
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
-
 import '../calculate_angles.dart';
+import '../exercise_result.dart';
 
 class SquatTracker {
   int counter = 0;
@@ -11,13 +11,16 @@ class SquatTracker {
     stage = "UP";
   }
 
-  String analyze(Pose pose) {
+  ExerciseResult analyze(Pose pose) {
     final hip = pose.landmarks[PoseLandmarkType.leftHip];
     final knee = pose.landmarks[PoseLandmarkType.leftKnee];
     final ankle = pose.landmarks[PoseLandmarkType.leftAnkle];
 
     if (hip == null || knee == null || ankle == null) {
-      return "Poziționează-te din profil.\nAparatul nu vede tot piciorul stâng.";
+      return const ExerciseResult(
+        displayValue: "--",
+        feedback: "Poziționează-te din profil.\nAparatul nu vede tot piciorul stâng.",
+      );
     }
 
     double angle = calculareUnghi(hip, knee, ankle);
@@ -28,6 +31,9 @@ class SquatTracker {
       counter++;
     }
 
-    return "REPETĂRI: $counter\nUnghi: ${angle.toStringAsFixed(0)}° | Stare: $stage";
+    return ExerciseResult(
+      displayValue: "$counter",
+      feedback: "Unghi genunchi: ${angle.toStringAsFixed(0)}° | Stare: $stage",
+    );
   }
 }

@@ -8,6 +8,8 @@ class ExerciseCard extends StatelessWidget {
   final Color accentColor;
   final bool isEnabled;
   final ExerciseAnalyzer? analyzer;
+  final bool requiresLandscape;
+  final bool isTimerBased;
   final VoidCallback? onReset;
 
   ExerciseCard({
@@ -16,6 +18,8 @@ class ExerciseCard extends StatelessWidget {
     required this.description,
     required this.icon,
     required this.accentColor,
+    required this.isTimerBased,
+    required this.requiresLandscape,
     this.analyzer,
     this.onReset,
     this.isEnabled = true,
@@ -39,6 +43,7 @@ class ExerciseCard extends StatelessWidget {
                       builder: (context) => CameraScreen(
                         exerciseName: title,
                         analyzer: analyzer!,
+                        requiresLandscape: requiresLandscape,
                       ),
                     ),
                   );

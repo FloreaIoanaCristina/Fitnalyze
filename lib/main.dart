@@ -1,7 +1,9 @@
+import 'package:fitnalyzer/screens/main_navigation_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'screens/home_screen.dart';
+
+import 'data/isar_service.dart';
 
 List<CameraDescription> cameras = [];
 
@@ -9,6 +11,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Permission.camera.request();
+
+  try {
+    final isarService = IsarService.instance;
+    await isarService.init();
+    print("Isar Database inițializată cu succes!");
+  } catch (e) {
+    print("Eroare critică la inițializarea Isar: $e");
+  }
 
   try {
     cameras = await availableCameras();
@@ -34,7 +44,7 @@ class MyApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: HomeScreen(),
+      home: const MainNavigationScreen(),
     );
   }
 }
