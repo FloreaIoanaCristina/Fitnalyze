@@ -1,6 +1,8 @@
 import 'package:fitnalyzer/screens/settings_screen.dart';
 import 'package:fitnalyzer/screens/workout_planner_screen.dart';
+import 'package:fitnalyzer/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'badges_screen.dart';
 import 'exercises_screen.dart';
@@ -22,6 +24,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     'Insigne & Recompense',
     'Setări',
   ];
+  String _userName = 'Atlet';
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -32,41 +35,61 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userName = prefs.getString('user_name')?.trim().isNotEmpty == true
+          ? prefs.getString('user_name')!
+          : 'Atlet';
+    });
+  }
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
         elevation: 2,
       ),
+      onDrawerChanged: (isOpened) {
+        if (isOpened) {
+          _loadUserName();
+        }
+      },
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Colors.blue.shade700,
+                color: AppColors.primary,
               ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child:  Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   CircleAvatar(
                     radius: 30,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person, size: 35, color: Colors.blue),
+                    backgroundImage: const AssetImage(
+                      'assets/icon/app_icon.png',
+                    ),
                   ),
                   SizedBox(height: 12),
                   Text(
-                    'Salut, Atlet!',
+                    'Salut, $_userName!',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
                     'Ești gata de antrenament?',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
                   ),
                 ],
               ),
@@ -92,7 +115,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               title: 'Insigne',
               index: 3,
             ),
-            const Divider(),
+            const Divider(
+              color: AppColors.textSecondary,
+            ),
             _buildDrawerItem(
               icon: Icons.settings,
               title: 'Setări',
@@ -100,6 +125,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
           ],
         ),
+        backgroundColor: AppColors.background,
       ),
       body: IndexedStack(
         index: _currentIndex,
@@ -118,17 +144,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return ListTile(
       leading: Icon(
         icon,
-        color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
+        color: isSelected ? AppColors.background : AppColors.textSecondary,
       ),
       title: Text(
         title,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? Colors.blue.shade700 : Colors.white,
+          color: isSelected ? AppColors.background : AppColors.textSecondary,
         ),
       ),
       selected: isSelected,
-      selectedTileColor: Colors.blue.shade50,
+      selectedTileColor: AppColors.primary,
       onTap: () {
         setState(() {
           _currentIndex = index; // Schimbă ecranul central

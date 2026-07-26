@@ -1,3 +1,4 @@
+import 'package:fitnalyzer/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
@@ -24,33 +25,21 @@ class PosePainter extends CustomPainter {
     if (poses.isEmpty) return;
 
     final pointPaint = Paint()
-      ..color = Colors.greenAccent
+      ..color = AppColors.success
       ..style = PaintingStyle.fill;
 
     final linePaint = Paint()
-      ..color = Colors.blueAccent
+      ..color = AppColors.accent
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke;
 
     Offset mapPoint(PoseLandmark landmark) {
-      double x = landmark.x;
-      double y = landmark.y;
-
-      if (!isLandscape) {
-        return Offset(
-          size.width -
-              (x * size.width / absoluteImageSize.width),
-          y * size.height / absoluteImageSize.height,
-        );
-      }
-
-      final rotatedX = y;
-      final rotatedY = absoluteImageSize.width - x;
+      final scaleX = size.width / absoluteImageSize.width;
+      final scaleY = size.height / absoluteImageSize.height;
 
       return Offset(
-        size.width -
-            (rotatedX * size.width / absoluteImageSize.height),
-        rotatedY * size.height / absoluteImageSize.width,
+        size.width - landmark.x * scaleX,
+        landmark.y * scaleY,
       );
     }
 

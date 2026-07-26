@@ -1,13 +1,8 @@
 import 'dart:math';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import '../data/models/exercise_schema.dart';
-
-
-class ExerciseResult {
-  final String displayValue;
-  final String feedback;
-  const ExerciseResult({required this.displayValue, required this.feedback});
-}
+import 'calculate_angles.dart';
+import 'exercise_result.dart';
 
 class GenericExerciseAnalyzer {
   final ExerciseSchema schema;
@@ -53,6 +48,7 @@ class GenericExerciseAnalyzer {
         return ExerciseResult(
           displayValue: schema.isTimerBased ? _formatTime(seconds) : "--",
           feedback: schema.fallbackFeedback,
+          currentProgress: schema.isTimerBased ? seconds : counter,
         );
       }
     }
@@ -143,46 +139,57 @@ class GenericExerciseAnalyzer {
       feedbackFinal = "$lastFeedback $warningText".trim();
     }
 
-    return ExerciseResult(displayValue: displayValue, feedback: feedbackFinal);
+    int progressValue = counter;
+    if (schema.trackingType == "IZOMETRIC_TIMP") {
+      progressValue = seconds;
+    } else if (schema.trackingType == "REPETARI_SPLIT") {
+      progressValue = leftCounter + rightCounter;
+    }
+
+    return ExerciseResult(displayValue: displayValue, feedback: feedbackFinal,currentProgress: progressValue);
   }
 
   double _executeGeometry(GeometryConfig geo, Pose pose, String activeSide) {
-    final pts = geo.inputPoints.map((p) => pose.landmarks[_resolveLandmarkType(p, activeSide)]!).toList();
+    final pts = geo.inputPoints
+        .map((p) => pose.landmarks[_resolveLandmarkType(p, activeSide)])
+        .whereType<PoseLandmark>()
+        .toList();
+
+    if (pts.length < geo.inputPoints.length) return 0.0;
 
     switch (geo.type) {
       case "ANGLE":
-        if (pts.length < 3) return 0.0;
-        return _calculareUnghi(pts[0], pts[1], pts[2]);
+        return calculareUnghi(pts[0], pts[1], pts[2]);
+
+      case "DISTANCE_RATIO":
+        if (pts.length < 4) return 0.0;
+        double distPicioare = sqrt(pow(pts[0].x - pts[1].x, 2) + pow(pts[0].y - pts[1].y, 2));
+        double distUmeri = sqrt(pow(pts[2].x - pts[3].x, 2) + pow(pts[2].y - pts[3].y, 2));
+        if (distUmeri == 0) return 0.0;
+        return distPicioare / distUmeri;
+
+      case "VERTICAL_DISTANCE":
+        if (pts.length < 2) return 0.0;
+        return pts[0].y - pts[1].y;
 
       case "RELATIVE_X":
-        if (pts.length < 2) return 0.0;
         double dx = pts[0].x - pts[1].x;
         if (geo.invertXOnRightSide && activeSide == "right") dx = -dx;
         return dx;
 
       case "RELATIVE_Y":
-        if (pts.length < 2) return 0.0;
         return pts[0].y - pts[1].y;
 
       case "ABS_DIFF_Y":
-        if (pts.length < 2) return 0.0;
         return (pts[0].y - pts[1].y).abs();
 
       case "MID_POINT_Y_DIST":
-        if (pts.length < 3) return 0.0;
         double midY = (pts[0].y + pts[2].y) / 2;
         return pts[1].y - midY;
 
       default:
         return 0.0;
     }
-  }
-
-  double _calculareUnghi(PoseLandmark p1, PoseLandmark p2, PoseLandmark p3) {
-    double radians = atan2(p3.y - p2.y, p3.x - p2.x) - atan2(p1.y - p2.y, p1.x - p2.x);
-    double angle = (radians * 180.0 / pi).abs();
-    if (angle > 180.0) angle = 360.0 - angle;
-    return angle;
   }
 
   PoseLandmarkType _resolveLandmarkType(String name, String side) {

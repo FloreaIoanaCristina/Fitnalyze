@@ -1,6 +1,12 @@
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import '../services/notification_service.dart';
+import '../utils/daily_stats.dart';
+import '../utils/workout_stats_data.dart';
+import 'models/exercise_badge.dart';
 import 'models/exercise_schema.dart';
+import 'models/workout_log.dart';
+import 'models/workout_plan.dart';
 
 class IsarService {
   late final Isar _isar;
@@ -15,11 +21,17 @@ class IsarService {
     final dir = await getApplicationDocumentsDirectory();
 
     _isar = await Isar.open(
-      [ExerciseSchemaSchema],
+      [
+        ExerciseSchemaSchema,
+        WorkoutPlanSchema,
+        ExerciseBadgeSchema,
+        WorkoutLogSchema,
+      ],
       directory: dir.path,
     );
 
     await _seedExercisesIfNeeded();
+    await _seedBadgesIfNeeded();
   }
 
   Future<ExerciseSchema?> getExerciseById(String exerciseId) async {
@@ -36,7 +48,7 @@ class IsarService {
   Future<void> _seedExercisesIfNeeded() async {
     final count = await _isar.exerciseSchemas.count();
 
-    if (count > 0) return;
+    //if (count > 0) return;
 
     final List<ExerciseSchema> defaultExercises = [
       ExerciseSchema()
@@ -338,7 +350,7 @@ class IsarService {
         ..sideStrategy = "DYNAMIC_BEST_SIDE" // Alege automat profilul cel mai vizibil (stângul sau dreptul)
         ..requiredLandmarks = ["shoulder", "hip", "knee"]
         ..fallbackFeedback = "Așază-te complet în cadru..."
-        ..trackingType = "IZOMETRIC_TEMPORIZAT"
+        ..trackingType = "IZOMETRIC_TIMP"
         ..geometries = [
           // 1. Unghiul șoldului (Aliniere umăr -> șold -> genunchi)
           GeometryConfig()
@@ -350,7 +362,7 @@ class IsarService {
           // 2. Geometrie auxiliară pentru detectarea înălțimii șoldului pe axa Y față de linia umeri-genunchi
           GeometryConfig()
             ..id = "pozitie_relativa_bazins"
-            ..type = "MIDPOINT_Y_DELTA" // Calculează hip.y - ((shoulder.y + knee.y) / 2)
+            ..type = "MIDPOINT_Y_DIST"
             ..inputPoints = ["hip", "shoulder", "knee"]
             ..invertXOnRightSide = false
         ]
@@ -481,7 +493,7 @@ class IsarService {
         ..sideStrategy = "FULL_BODY" // Punctele stângi și drepte se citesc în paralel
         ..requiredLandmarks = ["leftEar", "rightEar", "leftShoulder", "rightShoulder", "nose"]
         ..fallbackFeedback = "Stai cu fața la cameră.\nAsigură-te că fața și umerii sunt vizibili."
-        ..trackingType = "CONTOR_DUBLU" // Semnalizează afișarea separată Stânga/Dreapta în ecran
+        ..trackingType = "REPETARI_SPLIT" // Semnalizează afișarea separată Stânga/Dreapta în ecran
         ..geometries = [
           // 1. Unghiul gâtului pe partea stângă (Ear -> Nose -> Shoulder)
           GeometryConfig()
@@ -500,7 +512,7 @@ class IsarService {
           // 3. Diferența de înălțime a umerilor pe axa Y pentru postură
           GeometryConfig()
             ..id = "balans_umeri"
-            ..type = "VERTICAL_DISTANCE" // Calculează (leftShoulder.y - rightShoulder.y).abs()
+            ..type = "ABS_DIFF_Y" // Calculează (leftShoulder.y - rightShoulder.y).abs()
             ..inputPoints = ["leftShoulder", "rightShoulder"]
             ..invertXOnRightSide = false
         ]
@@ -572,14 +584,14 @@ class IsarService {
           // 1. Delta Y: wrist.y - shoulder.y
           GeometryConfig()
             ..id = "delta_y"
-            ..type = "VERTICAL_DISTANCE_RAW"
+            ..type = "RELATIVE_Y"
             ..inputPoints = ["wrist", "shoulder"]
             ..invertXOnRightSide = false,
 
           // 2. Delta X: wrist.x - shoulder.x
           GeometryConfig()
             ..id = "delta_x"
-            ..type = "HORIZONTAL_DISTANCE_RAW"
+            ..type = "RELATIVE_X"
             ..inputPoints = ["wrist", "shoulder"]
             ..invertXOnRightSide = false, // Pe stânga rămâne natural
 
@@ -666,13 +678,13 @@ class IsarService {
         ..geometries = [
           GeometryConfig()
             ..id = "delta_y"
-            ..type = "VERTICAL_DISTANCE_RAW"
+            ..type = "RELATIVE_Y"
             ..inputPoints = ["wrist", "shoulder"]
             ..invertXOnRightSide = false,
 
           GeometryConfig()
             ..id = "delta_x"
-            ..type = "HORIZONTAL_DISTANCE_RAW"
+            ..type = "RELATIVE_X"
             ..inputPoints = ["wrist", "shoulder"]
             ..invertXOnRightSide = true, // <--- Oglindește axa X automat pentru brațul drept!
 
@@ -751,14 +763,11 @@ class IsarService {
         ..fallbackFeedback = "Stai cu fața la cameră.\nAsigură-te că brațul Stâng este complet vizibil."
         ..trackingType = "REPETARI_SIMPLE"
         ..geometries = [
-          // 1. Unghiul de ridicare laterală (Șold -> Umăr -> Încheietură)
           GeometryConfig()
             ..id = "unghi_ridicare"
             ..type = "ANGLE"
             ..inputPoints = ["hip", "shoulder", "wrist"]
             ..invertXOnRightSide = false,
-
-          // 2. Unghiul cotului (Umăr -> Cot -> Încheietură) pentru postură
           GeometryConfig()
             ..id = "unghi_cot"
             ..type = "ANGLE"
@@ -766,7 +775,6 @@ class IsarService {
             ..invertXOnRightSide = false
         ]
         ..transitions = [
-          // Trecerea în starea UP când brațul depășește 80 de grade
           TransitionRule()
             ..fromState = "DOWN"
             ..toState = "UP"
@@ -875,7 +883,307 @@ class IsarService {
     ];
 
     await _isar.writeTxn(() async {
+      await _isar.exerciseSchemas.clear();
       await _isar.exerciseSchemas.putAll(defaultExercises);
+    });
+  }
+
+  Future<List<WorkoutPlan>> getAllWorkoutPlans() async {
+    return await _isar.workoutPlans.where().findAll();
+  }
+
+// Salvare sau editare rutină
+  Future<void> saveWorkoutPlan(WorkoutPlan plan) async {
+    await _isar.writeTxn(() async {
+      await _isar.workoutPlans.put(plan);
+    });
+    await NotificationService.instance.scheduleWorkoutNotifications(plan);
+  }
+
+// Ștergerea unei rutine după ID-ul Isar
+  Future<void> deleteWorkoutPlan(int id) async {
+    await _isar.writeTxn(() async {
+      await _isar.workoutPlans.delete(id);
+    });
+  }
+
+  Future<void> logWorkoutSession({
+    required String exerciseId,
+    required int completedReps,
+    required int durationSeconds,
+  }) async {
+    final log = WorkoutLog()
+      ..exerciseId = exerciseId
+      ..completedReps = completedReps
+      ..durationSeconds = durationSeconds
+      ..timestamp = DateTime.now();
+
+    await _isar.writeTxn(() async {
+      await _isar.workoutLogs.put(log);
+    });
+  }
+
+  Future<WorkoutStatsData> getWorkoutStatistics() async {
+    final logs = await _isar.workoutLogs.where().findAll();
+
+    int totalReps = 0;
+    final Map<String, int> repsPerExercise = {};
+    final Map<DateTime, int> dailyReps = {};
+
+    final now = DateTime.now();
+    for (int i = 6; i >= 0; i--) {
+      final day = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      dailyReps[day] = 0;
+    }
+
+    for (var log in logs) {
+      int effectiveReps = log.completedReps;
+
+      if (effectiveReps == 0 && log.durationSeconds > 0) {
+        effectiveReps = (log.durationSeconds / 3).floor();
+      }
+
+      if (effectiveReps > 0) {
+        totalReps += effectiveReps;
+
+        final exName = log.exerciseId.toUpperCase();
+        repsPerExercise[exName] = (repsPerExercise[exName] ?? 0) + effectiveReps;
+
+        final logDate = DateTime(log.timestamp.year, log.timestamp.month, log.timestamp.day);
+        if (dailyReps.containsKey(logDate)) {
+          dailyReps[logDate] = (dailyReps[logDate] ?? 0) + effectiveReps;
+        }
+      }
+    }
+
+    String topExercise = "-";
+    int maxReps = 0;
+    repsPerExercise.forEach((name, reps) {
+      if (reps > maxReps) {
+        maxReps = reps;
+        topExercise = name;
+      }
+    });
+    return WorkoutStatsData(
+      totalReps: totalReps,
+      topExerciseName: topExercise,
+      repsPerExercise: repsPerExercise,
+      dailyReps: dailyReps,
+    );
+  }
+
+  Future<DailyStats> getTotalStatsForDay(String exerciseId, DateTime date) async {
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    // Filtrăm logurile din Isar pentru exercițiul și ziua respectivă
+    final logs = await _isar.workoutLogs
+        .filter()
+        .exerciseIdEqualTo(exerciseId, caseSensitive: false)
+        .timestampBetween(startOfDay, endOfDay)
+        .findAll();
+
+    int totalReps = 0;
+    int totalDuration = 0;
+
+    for (var log in logs) {
+      totalReps += log.completedReps;
+      totalDuration += log.durationSeconds;
+    }
+
+    return DailyStats(
+      reps: totalReps,
+      durationSeconds: totalDuration,
+    );
+  }
+
+  Future<List<ExerciseBadge>> getBadgesForExercise(String exerciseId) async {
+    return await _isar.exerciseBadges
+        .filter()
+        .exerciseIdEqualTo(exerciseId)
+        .findAll();
+  }
+
+  Future<List<ExerciseBadge>> getAllBadges() async {
+    return await _isar.exerciseBadges.where().findAll();
+  }
+
+  Future<void> saveBadge(ExerciseBadge badge) async {
+    await _isar.writeTxn(() async {
+      await _isar.exerciseBadges.put(badge);
+    });
+  }
+
+  Future<void> _seedBadgesIfNeeded() async {
+    final count = await _isar.exerciseBadges.count();
+    if (count > 0) return; // Se populează o singură dată
+
+    final exercises = await getAllExercises();
+    final List<ExerciseBadge> defaultBadges = [];
+
+    for (var ex in exercises) {
+      final isTimer = ex.isTimerBased ?? false;
+      final exId = ex.exerciseId ?? "unknown";
+      final title = ex.title ?? "Exercițiu";
+
+      if (isTimer) {
+        // --- BADGE-URI PENTRU EXERCIȚII CU TIMP (ex: Plank) ---
+        defaultBadges.addAll([
+          // Instant (1 Sesiune)
+          ExerciseBadge()
+            ..badgeId = "${exId}_30s"
+            ..exerciseId = exId
+            ..title = "$title: Începător"
+            ..description = "Menține poziția timp de 30 de secunde."
+            ..iconName = "bronze_medal"
+            ..criteriaType = "TOTAL_DURATION"
+            ..targetValue = 30
+            ..requiredDaysStreak = 0,
+          ExerciseBadge()
+            ..badgeId = "${exId}_90s"
+            ..exerciseId = exId
+            ..title = "$title: Avansat"
+            ..description = "Menține poziția timp de 1 minut și 30 secunde."
+            ..iconName = "silver_medal"
+            ..criteriaType = "TOTAL_DURATION"
+            ..targetValue = 90
+            ..requiredDaysStreak = 0,
+          ExerciseBadge()
+            ..badgeId = "${exId}_180s"
+            ..exerciseId = exId
+            ..title = "$title: Maestru"
+            ..description = "Menține poziția timp de 3 minute."
+            ..iconName = "gold_medal"
+            ..criteriaType = "TOTAL_DURATION"
+            ..targetValue = 180
+            ..requiredDaysStreak = 0,
+
+          // Streak-uri de 7 zile
+          ExerciseBadge()
+            ..badgeId = "${exId}_30s_7days"
+            ..exerciseId = exId
+            ..title = "$title: Rutină Bronze"
+            ..description = "Execută câte 30s de $title zilnic, timp de 7 zile la rând."
+            ..iconName = "fire_bronze"
+            ..criteriaType = "DURATION_STREAK"
+            ..targetValue = 30
+            ..requiredDaysStreak = 7,
+          ExerciseBadge()
+            ..badgeId = "${exId}_60s_7days"
+            ..exerciseId = exId
+            ..title = "$title: Rutină Silver"
+            ..description = "Execută câte 60s de $title zilnic, timp de 7 zile la rând."
+            ..iconName = "fire_silver"
+            ..criteriaType = "DURATION_STREAK"
+            ..targetValue = 60
+            ..requiredDaysStreak = 7,
+          ExerciseBadge()
+            ..badgeId = "${exId}_180s_7days"
+            ..exerciseId = exId
+            ..title = "$title: Rutină Gold"
+            ..description = "Execută câte 3 min de $title zilnic, timp de 7 zile la rând."
+            ..iconName = "fire_gold"
+            ..criteriaType = "DURATION_STREAK"
+            ..targetValue = 180
+            ..requiredDaysStreak = 7,
+        ]);
+      } else {
+        // --- BADGE-URI PENTRU EXERCIȚII CU REPETĂRI (ex: Genuflexiuni, Flotări) ---
+        defaultBadges.addAll([
+          // Instant (1 Sesiune)
+          ExerciseBadge()
+            ..badgeId = "${exId}_10reps"
+            ..exerciseId = exId
+            ..title = "$title: Primele 10"
+            ..description = "Finalizează 10 repetări într-o singură sesiune."
+            ..iconName = "bronze_medal"
+            ..criteriaType = "TOTAL_REPS"
+            ..targetValue = 10
+            ..requiredDaysStreak = 0,
+          ExerciseBadge()
+            ..badgeId = "${exId}_50reps"
+            ..exerciseId = exId
+            ..title = "$title: Fortăreța"
+            ..description = "Finalizează 50 de repetări într-o singură sesiune."
+            ..iconName = "silver_medal"
+            ..criteriaType = "TOTAL_REPS"
+            ..targetValue = 50
+            ..requiredDaysStreak = 0,
+          ExerciseBadge()
+            ..badgeId = "${exId}_100reps"
+            ..exerciseId = exId
+            ..title = "$title: Imparabil"
+            ..description = "Finalizează 100 de repetări într-o singură sesiune."
+            ..iconName = "gold_medal"
+            ..criteriaType = "TOTAL_REPS"
+            ..targetValue = 100
+            ..requiredDaysStreak = 0,
+
+          // Streak-uri de 7 zile
+          ExerciseBadge()
+            ..badgeId = "${exId}_10reps_7days"
+            ..exerciseId = exId
+            ..title = "$title: Perseverent Bronze"
+            ..description = "Execută câte 10 repetări zilnic, timp de 7 zile la rând."
+            ..iconName = "fire_bronze"
+            ..criteriaType = "REPS_STREAK"
+            ..targetValue = 10
+            ..requiredDaysStreak = 7,
+          ExerciseBadge()
+            ..badgeId = "${exId}_20reps_7days"
+            ..exerciseId = exId
+            ..title = "$title: Perseverent Silver"
+            ..description = "Execută câte 20 de repetări zilnic, timp de 7 zile la rând."
+            ..iconName = "fire_silver"
+            ..criteriaType = "REPS_STREAK"
+            ..targetValue = 20
+            ..requiredDaysStreak = 7,
+          ExerciseBadge()
+            ..badgeId = "${exId}_50reps_7days"
+            ..exerciseId = exId
+            ..title = "$title: Perseverent Gold"
+            ..description = "Execută câte 50 de repetări zilnic, timp de 7 zile la rând."
+            ..iconName = "fire_gold"
+            ..criteriaType = "REPS_STREAK"
+            ..targetValue = 50
+            ..requiredDaysStreak = 7,
+        ]);
+      }
+    }
+
+    if (defaultBadges.isNotEmpty) {
+      await _isar.writeTxn(() async {
+        await _isar.exerciseBadges.putAll(defaultBadges);
+      });
+    }
+  }
+
+  Future<List<ExerciseBadge>> getRecentUnlockedBadges({int limit = 5}) async {
+    final allUnlocked = await _isar.exerciseBadges
+        .filter()
+        .isUnlockedEqualTo(true)
+        .findAll();
+
+    allUnlocked.sort((a, b) {
+      if (a.unlockedAt == null) return 1;
+      if (b.unlockedAt == null) return -1;
+      return b.unlockedAt!.compareTo(a.unlockedAt!);
+    });
+
+    return allUnlocked.take(limit).toList();
+  }
+
+  Future<void> resetAllUserData() async {
+    await _isar.writeTxn(() async {
+      await _isar.workoutLogs.clear();
+      await _isar.workoutPlans.clear();
+      final allBadges = await _isar.exerciseBadges.where().findAll();
+      for (var badge in allBadges) {
+        badge.isUnlocked = false;
+        badge.unlockedAt = null;
+        badge.screenshotPath = null;
+        await _isar.exerciseBadges.put(badge);
+      }
     });
   }
 }

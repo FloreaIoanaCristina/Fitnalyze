@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import '../screens/camera_screen.dart';
+import '../theme/app_colors.dart';
 
 class ExerciseCard extends StatelessWidget {
+  final String exerciseId;
   final String title;
   final String description;
   final IconData icon;
   final Color accentColor;
   final bool isEnabled;
-  final ExerciseAnalyzer? analyzer;
+  final dynamic analyzer;
   final bool requiresLandscape;
   final bool isTimerBased;
   final VoidCallback? onReset;
 
-  ExerciseCard({
+  const ExerciseCard({
     super.key,
+    required this.exerciseId,
     required this.title,
     required this.description,
     required this.icon,
@@ -25,32 +28,32 @@ class ExerciseCard extends StatelessWidget {
     this.isEnabled = true,
   });
 
-
   @override
   Widget build(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     return Card(
-      color: const Color(0xFF1E1E1E),
+      color: AppColors.card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 4,
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: InkWell(
         onTap: isEnabled && analyzer != null
             ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => CameraScreen(
-                        exerciseName: title,
-                        analyzer: analyzer!,
-                        requiresLandscape: requiresLandscape,
-                      ),
-                    ),
-                  );
-                  if (onReset != null) {
-                    onReset!();
-                  }
-                }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CameraScreen(
+                exerciseId: exerciseId,
+                exerciseName: title,
+                analyzer: analyzer!,
+                requiresLandscape: requiresLandscape,
+              ),
+            ),
+          );
+          if (onReset != null) {
+            onReset!();
+          }
+        }
             : null,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
@@ -81,7 +84,7 @@ class ExerciseCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: isEnabled ? Colors.white : Colors.grey,
+                        color: isEnabled ? AppColors.textPrimary : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -90,14 +93,17 @@ class ExerciseCard extends StatelessWidget {
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                       softWrap: true,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                      style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               if (isEnabled)
-                const Icon(Icons.arrow_forward_ios, color: Colors.blueAccent, size: 18)
+                const Icon(Icons.arrow_forward_ios, color: AppColors.accent, size: 18)
             ],
           ),
         ),
